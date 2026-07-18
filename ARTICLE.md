@@ -120,7 +120,9 @@ of Nova Lite calls, and tiny DynamoDB/S3 usage. Tear down with
 
 ## Link to App or Repo
 
-Source code (public GitHub repo): **[https://github.com/<your-username>/sift-agent](https://github.com/<your-username>/sift-agent)**
+Source code (public GitHub repo): **[https://github.com/sivaabishikth2025-byte/sift-agent](https://github.com/sivaabishikth2025-byte/sift-agent)**
 
-The README includes one-command deploy instructions and a no-AWS-needed local
-demo. *(Replace the link above with your actual repo before publishing.)*
+Anyone can deploy their own personalized instance — the README has a
+no-AWS-needed local demo and a one-command `sam deploy --guided` that prompts for
+your own topics, feeds, schedule, and notification email. Nothing is hardcoded to
+my account.
