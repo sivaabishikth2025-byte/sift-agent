@@ -21,9 +21,6 @@ Parameters:
   Topics:
     Type: String
     Default: "AI agents, AWS, serverless, developer tooling, LLMs"
-  RssFeeds:
-    Type: String
-    Default: "https://aws.amazon.com/blogs/aws/feed/,https://hnrss.org/frontpage"
   NotifyEmail:
     Type: String
     Default: ""
@@ -114,7 +111,6 @@ Resources:
           SIFT_MEMORY_TABLE: !Ref MemoryTable
           SIFT_BRIEF_BUCKET: !Ref BriefsBucket
           SIFT_TOPICS: !Ref Topics
-          SIFT_RSS_FEEDS: !Ref RssFeeds
           SIFT_SNS_TOPIC_ARN: !Ref NotifyTopic
           SIFT_SES_FROM: !Ref SesFrom
       Policies:

@@ -65,7 +65,7 @@ def fetch_hackernews(limit: int) -> list[dict]:
             })
     except Exception as e:  # pragma: no cover - network best effort
         return [{"id": "hn-error", "title": "(hackernews fetch failed)", "url": "",
-                 "source": "hackernews", "published": "", "summary": str(e)}]
+                 "source": "hackernews", "published": "", "summary": str(e), "error": True}]
     return out
 
 
@@ -76,7 +76,7 @@ def fetch_rss(url: str, limit: int) -> list[dict]:
         root = ET.fromstring(_get(url))
     except Exception as e:  # pragma: no cover
         return [{"id": f"rss-error-{_item_id(url, '')}", "title": f"(rss fetch failed: {url})",
-                 "url": url, "source": "rss", "published": "", "summary": str(e)}]
+                 "url": url, "source": "rss", "published": "", "summary": str(e), "error": True}]
 
     # RSS 2.0
     items = root.findall(".//item")
@@ -116,6 +116,26 @@ def _feed_name(url: str) -> str:
     return f"rss:{host}"
 
 
+def fetch_google_news(topics: list[str], limit: int) -> list[dict]:
+    """Topic-driven news across the whole web via Google News RSS search.
+
+    This is what makes each user's brief actually follow the topics they picked,
+    instead of being confined to a fixed handful of feeds. One query, any source
+    Google indexes (Reuters, Bloomberg, trade press, blogs, ...).
+    """
+    topics = [t for t in (topics or []) if t.strip()]
+    if not topics:
+        return []
+    query = " OR ".join(f'"{t.strip()}"' for t in topics[:8])
+    q = urllib.parse.quote(query)
+    url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
+    items = fetch_rss(url, limit)
+    for it in items:
+        if not it.get("error"):
+            it["source"] = "google-news"
+    return items
+
+
 def fetch_github_trending(days: int, limit: int) -> list[dict]:
     """Recently created, fast-rising repos via the GitHub search API (no auth)."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
@@ -135,14 +155,15 @@ def fetch_github_trending(days: int, limit: int) -> list[dict]:
             })
     except Exception as e:  # pragma: no cover
         return [{"id": "gh-error", "title": "(github fetch failed)", "url": "",
-                 "source": "github-trending", "published": "", "summary": str(e)}]
+                 "source": "github-trending", "published": "", "summary": str(e), "error": True}]
     return out
 
 
 def gather_all() -> list[dict]:
-    """Pull every configured source and return a de-duplicated list."""
+    """Pull every configured source and return a de-duplicated, clean list."""
     items: list[dict] = []
     items += fetch_hackernews(config.PER_SOURCE_LIMIT)
+    items += fetch_google_news(config.TOPICS, config.PER_SOURCE_LIMIT * 2)
     for feed in config.RSS_FEEDS:
         items += fetch_rss(feed, config.PER_SOURCE_LIMIT)
     items += fetch_github_trending(config.GITHUB_TRENDING_DAYS, config.PER_SOURCE_LIMIT)
@@ -150,6 +171,9 @@ def gather_all() -> list[dict]:
     seen: set[str] = set()
     deduped: list[dict] = []
     for it in items:
+        # Drop dead-feed error markers so a flaky source never pollutes a brief.
+        if it.get("error") or not it.get("url"):
+            continue
         if it["id"] in seen:
             continue
         seen.add(it["id"])

@@ -63,10 +63,25 @@ TOPICS = [t.strip() for t in _env(
 ).split(",") if t.strip()]
 
 # RSS/Atom feeds to pull. Comma-separated. All public, no API keys.
-RSS_FEEDS = [u.strip() for u in _env(
-    "SIFT_RSS_FEEDS",
-    "https://aws.amazon.com/blogs/aws/feed/,https://hnrss.org/frontpage",
-).split(",") if u.strip()]
+# A broad, reputable default spread across tech, AI, business and world news;
+# topic-driven Google News search (see sources.py) covers everything else.
+_DEFAULT_FEEDS = ",".join([
+    "https://aws.amazon.com/blogs/aws/feed/",
+    "https://techcrunch.com/feed/",
+    "https://www.theverge.com/rss/index.xml",
+    "https://feeds.arstechnica.com/arstechnica/index",
+    "https://www.wired.com/feed/rss",
+    "https://www.technologyreview.com/feed/",
+    "https://blog.google/technology/ai/rss/",
+    "https://lobste.rs/rss",
+    "https://hnrss.org/frontpage",
+    "https://www.reddit.com/r/technology/.rss",
+    "http://feeds.bbci.co.uk/news/technology/rss.xml",
+    "https://feeds.feedburner.com/venturebeat/SZYF",
+])
+RSS_FEEDS = [u.strip() for u in
+             (_env("SIFT_RSS_FEEDS", _DEFAULT_FEEDS) or _DEFAULT_FEEDS).split(",")
+             if u.strip()]
 
 # How many items to pull per source.
 PER_SOURCE_LIMIT = int(_env("SIFT_PER_SOURCE_LIMIT", "12"))
