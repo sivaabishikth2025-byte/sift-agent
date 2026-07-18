@@ -18,16 +18,29 @@ import config
 log = logging.getLogger()
 
 
-def _public_link() -> str | None:
+def _public_link(prefix: str = "") -> str | None:
     """A stable, public https link to the latest brief on the S3 website bucket."""
     if not config.BRIEF_BUCKET:
         return None
-    return f"https://{config.BRIEF_BUCKET}.s3.{config.AWS_REGION}.amazonaws.com/latest.html"
+    p = (prefix.rstrip("/") + "/") if prefix else ""
+    return f"https://{config.BRIEF_BUCKET}.s3.{config.AWS_REGION}.amazonaws.com/{p}latest.html"
 
 
-def send(subject: str, summary: str, location: str | None) -> dict:
-    link = _public_link() or (location or "")
-    body = f"{summary}\n\nRead the full brief: {link}\n\n— Sift"
+def send(subject: str, summary: str, location: str | None,
+         to_email: str | None = None, prefix: str = "") -> dict:
+    link = _public_link(prefix) or (location or "")
+    body = f"{summary}\n\nRead your full brief: {link}\n\n— Sift"
+
+    # Per-user delivery: email this one signed-up user via Amazon SES.
+    if to_email and config.SES_FROM:
+        import boto3
+        boto3.client("ses", region_name=config.AWS_REGION).send_email(
+            Source=config.SES_FROM,
+            Destination={"ToAddresses": [to_email]},
+            Message={"Subject": {"Data": subject[:100]},
+                     "Body": {"Text": {"Data": body}}})
+        log.info("Notified %s via SES", to_email)
+        return {"channel": "ses", "sent": True, "to": to_email}
 
     if config.SNS_TOPIC_ARN:
         import boto3

@@ -80,30 +80,35 @@ class LocalMemory:
 
 
 class DynamoDBMemory:
-    def __init__(self, table_name: str):
+    def __init__(self, table_name: str, namespace: str = ""):
         import boto3
         self._ddb = boto3.resource("dynamodb", region_name=config.AWS_REGION)
         self._t = self._ddb.Table(table_name)
+        # Namespace isolates each signed-up user's memory in the shared table.
+        self.ns = namespace or ""
+        self._ip = f"{self.ns}item#"     # item pk prefix
+        self._tp = f"{self.ns}thesis#"   # thesis pk prefix
 
     def known_ids(self) -> set[str]:
         ids: set[str] = set()
-        kwargs = {"ProjectionExpression": "pk"}
+        kwargs = {"FilterExpression": "begins_with(pk, :p)",
+                  "ExpressionAttributeValues": {":p": self._ip}}
         while True:
             resp = self._t.scan(**kwargs)
-            ids.update(i["pk"] for i in resp.get("Items", []) if i["pk"].startswith("item#"))
+            ids.update(i["pk"] for i in resp.get("Items", []))
             if "LastEvaluatedKey" not in resp:
                 break
             kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
-        return {i.split("item#", 1)[1] for i in ids}
+        return {i.split(self._ip, 1)[1] for i in ids}
 
     def known_index(self) -> dict[str, str]:
         idx: dict[str, str] = {}
         kwargs = {"FilterExpression": "begins_with(pk, :p)",
-                  "ExpressionAttributeValues": {":p": "item#"}}
+                  "ExpressionAttributeValues": {":p": self._ip}}
         while True:
             resp = self._t.scan(**kwargs)
             for i in resp.get("Items", []):
-                idx[i["pk"].split("item#", 1)[1]] = i.get("hash", "")
+                idx[i["pk"].split(self._ip, 1)[1]] = i.get("hash", "")
             if "LastEvaluatedKey" not in resp:
                 break
             kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
@@ -113,7 +118,7 @@ class DynamoDBMemory:
         q = (query or "").lower()
         resp = self._t.scan(
             FilterExpression="begins_with(pk, :p)",
-            ExpressionAttributeValues={":p": "item#"},
+            ExpressionAttributeValues={":p": self._ip},
         )
         scored = []
         for item in resp.get("Items", []):
@@ -125,10 +130,9 @@ class DynamoDBMemory:
         return [i for _, i in scored[:limit]]
 
     def recent_theses(self, limit: int = 3) -> list[dict]:
-        # Theses are stored with pk="thesis#<ts>"; a scan is fine at this scale.
         resp = self._t.scan(
             FilterExpression="begins_with(pk, :p)",
-            ExpressionAttributeValues={":p": "thesis#"},
+            ExpressionAttributeValues={":p": self._tp},
         )
         items = sorted(resp.get("Items", []), key=lambda x: x.get("ts", 0))
         return items[-limit:]
@@ -138,7 +142,7 @@ class DynamoDBMemory:
         with self._t.batch_writer() as bw:
             for it in items:
                 bw.put_item(Item={
-                    "pk": f"item#{it['id']}", "title": it.get("title", ""),
+                    "pk": f"{self._ip}{it['id']}", "title": it.get("title", ""),
                     "url": it.get("url", ""), "note": it.get("note", ""),
                     "hash": it.get("hash", ""), "first_seen": now,
                 })
@@ -146,7 +150,7 @@ class DynamoDBMemory:
     def remember_thesis(self, thesis: str, confidence: str):
         ts = int(time.time())
         self._t.put_item(Item={
-            "pk": f"thesis#{ts}", "ts": ts, "thesis": thesis, "confidence": confidence,
+            "pk": f"{self._tp}{ts}", "ts": ts, "thesis": thesis, "confidence": confidence,
         })
 
     def mark_seen(self, items: list[dict]):
@@ -157,7 +161,7 @@ class DynamoDBMemory:
                 if it["id"] in known:
                     continue
                 bw.put_item(Item={
-                    "pk": f"item#{it['id']}", "title": it.get("title", ""),
+                    "pk": f"{self._ip}{it['id']}", "title": it.get("title", ""),
                     "url": it.get("url", ""),
                     "note": it.get("note") or it.get("summary", ""),
                     "hash": it.get("hash", ""), "first_seen": now,
@@ -171,5 +175,5 @@ def get_memory():
         if vault:
             return obsidian.ObsidianMemory(vault)
     if config.MEMORY_TABLE:
-        return DynamoDBMemory(config.MEMORY_TABLE)
+        return DynamoDBMemory(config.MEMORY_TABLE, config.MEMORY_NS)
     return LocalMemory(config.LOCAL_ROOT)

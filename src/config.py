@@ -31,6 +31,8 @@ MAX_TURNS = int(_env("SIFT_MAX_TURNS", "8"))
 MEMORY_TABLE = _env("SIFT_MEMORY_TABLE")
 # When BRIEF_BUCKET is set we publish briefs to S3; otherwise the local disk.
 BRIEF_BUCKET = _env("SIFT_BRIEF_BUCKET")
+# Namespace for memory (set per user on fan-out runs so dedup is per-account).
+MEMORY_NS = _env("SIFT_MEMORY_NS")
 
 # --- Obsidian (Git-synced vault) --------------------------------------------
 # Connect a GitHub repo that your Obsidian vault syncs to (Obsidian Git plugin).
@@ -45,6 +47,8 @@ GITHUB_TOKEN = _env("SIFT_GITHUB_TOKEN") or _env("GITHUB_TOKEN")
 # notification is a no-op (the brief still publishes).
 SNS_TOPIC_ARN = _env("SIFT_SNS_TOPIC_ARN")   # Amazon SNS (email/SMS)
 WEBHOOK_URL = _env("SIFT_WEBHOOK_URL")        # Slack / Discord / Telegram webhook
+# Verified Amazon SES sender, used for per-user branded emails on fan-out runs.
+SES_FROM = _env("SIFT_SES_FROM")
 
 # Local storage root (used for memory + briefs when not on AWS).
 # In Lambda the only writable path is /tmp.

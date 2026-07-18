@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sift — your always-on morning brief</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%B0%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="nav">
+  <div class="brand">🛰️ Sift</div>
+  <div id="nav-actions"></div>
+</header>
+
+<!-- Landing (signed out) -->
+<section id="landing" class="hidden">
+  <div class="hero">
+    <h1>Your always-on morning brief.</h1>
+    <p class="lead">Sift wakes up every morning, reads the sources you care about,
+      remembers what it already told you, and leaves a fresh brief waiting — no app to open.</p>
+    <div class="cta">
+      <button class="btn primary" id="signup-btn">Get started — it's free</button>
+      <button class="btn ghost" id="login-btn">Log in</button>
+    </div>
+  </div>
+  <div class="features">
+    <div class="feature"><h3>Pick your topics</h3><p>Choose what matters — AI, AWS, your niche feeds. Sift tailors the brief to you.</p></div>
+    <div class="feature"><h3>Only what's new</h3><p>It remembers every story it has seen, so you never read the same news twice.</p></div>
+    <div class="feature"><h3>Delivered daily</h3><p>A crisp brief in your inbox and Obsidian vault, every morning, automatically.</p></div>
+  </div>
+</section>
+
+<!-- Dashboard (signed in) -->
+<section id="dashboard" class="hidden">
+  <div class="card">
+    <h2>Your preferences</h2>
+    <p class="sub">Signed in as <b id="user-email"></b>. These drive your personal morning brief.</p>
+
+    <label>Topics you care about</label>
+    <div id="topic-chips" class="chips"></div>
+    <input id="topics" type="text" placeholder="Add your own, comma-separated">
+
+    <label>RSS / Atom feeds (comma-separated)</label>
+    <textarea id="feeds" rows="2"></textarea>
+
+    <div class="row">
+      <div>
+        <label>Delivery time</label>
+        <input id="schedule" type="time" value="06:00">
+      </div>
+      <div>
+        <label>Obsidian vault repo (optional)</label>
+        <input id="obsidian_repo" type="text" placeholder="username/my-vault">
+      </div>
+    </div>
+
+    <label class="checkbox"><input id="enabled" type="checkbox" checked> Send me the daily brief</label>
+
+    <div class="actions">
+      <button class="btn primary" id="save-btn">Save preferences</button>
+      <span id="save-status" class="status"></span>
+    </div>
+  </div>
+</section>
+
+<footer class="foot">Sift · powered by Amazon Bedrock Nova, Lambda &amp; EventBridge</footer>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body></html>

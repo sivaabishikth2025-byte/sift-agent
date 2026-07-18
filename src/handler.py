@@ -22,13 +22,32 @@ log = logging.getLogger()
 log.setLevel(logging.INFO)
 
 
+def _apply_user_prefs(user: dict) -> tuple[str, str, str]:
+    """Override the global config with one signed-up user's preferences.
+
+    Returns (prefix, to_email, user_id) for per-user brief output + delivery.
+    """
+    uid = user.get("userId") or user.get("sub") or "user"
+    if user.get("topics"):
+        config.TOPICS = [t.strip() for t in str(user["topics"]).split(",") if t.strip()]
+    if user.get("feeds"):
+        config.RSS_FEEDS = [u.strip() for u in str(user["feeds"]).split(",") if u.strip()]
+    config.MEMORY_NS = f"u/{uid}#"
+    return f"u/{uid}", user.get("email", ""), uid
+
+
 def run_once(event: dict | None = None) -> dict:
     event = event or {}
+    user = event.get("user") or {}
+    prefix, to_email = "", None
+    if user:
+        prefix, to_email, uid = _apply_user_prefs(user)
+        log.info("Per-user run for %s (%s)", uid, to_email)
     log.info("Sift run starting: %s", json.dumps(config.summary()))
 
     llm = get_llm()
     memory = get_memory()
-    reporter = Reporter()
+    reporter = Reporter(prefix=prefix)
     ctx = tools.ToolContext(memory, reporter)
 
     now = datetime.now(timezone.utc).strftime("%A %Y-%m-%d %H:%M UTC")
@@ -59,6 +78,8 @@ def run_once(event: dict | None = None) -> dict:
                 subject=title,
                 summary=summary,
                 location=result.get("published"),
+                to_email=to_email,
+                prefix=prefix,
             )
             result["notified"] = notif
             log.info("Notification: %s", notif)
@@ -76,6 +97,51 @@ def lambda_handler(event, context):
         "summary": result.get("final_text"),
         "turns": len(result.get("trace", [])),
     }
+
+
+def fanout_handler(event, context):
+    """Scheduled entry: run one personal brief per signed-up user.
+
+    Scans the users table and asynchronously invokes this stack's agent function
+    once per enabled user (passing their saved preferences), plus one public
+    demo run. Each invocation is isolated, so one user's failure never blocks
+    another's brief.
+    """
+    import os
+    import boto3
+
+    users_table = os.environ["USERS_TABLE"]
+    target = os.environ["TARGET_FUNCTION"]
+    lam = boto3.client("lambda")
+    ddb = boto3.resource("dynamodb")
+    table = ddb.Table(users_table)
+
+    def _invoke(payload: dict):
+        lam.invoke(FunctionName=target, InvocationType="Event",
+                   Payload=json.dumps(payload).encode("utf-8"))
+
+    # 1) Public demo brief (the always-on dashboard).
+    _invoke({"trigger": "schedule"})
+
+    # 2) One personalized brief per enabled user.
+    count = 0
+    kwargs: dict = {}
+    while True:
+        resp = table.scan(**kwargs)
+        for u in resp.get("Items", []):
+            if u.get("enabled") is False:
+                continue
+            _invoke({"trigger": "fanout", "user": {
+                "userId": u.get("userId"), "email": u.get("email", ""),
+                "topics": u.get("topics", ""), "feeds": u.get("feeds", ""),
+            }})
+            count += 1
+        if "LastEvaluatedKey" not in resp:
+            break
+        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+
+    log.info("Fan-out dispatched %d personal runs", count)
+    return {"statusCode": 200, "dispatched": count}
 
 
 if __name__ == "__main__":

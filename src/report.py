@@ -146,6 +146,10 @@ def _stats_html(stats: dict | None) -> str:
 
 
 class Reporter:
+    def __init__(self, prefix: str = ""):
+        # Per-user briefs live under "u/<userId>/"; the public demo uses "".
+        self.prefix = prefix.rstrip("/") + "/" if prefix else ""
+
     def render(self, title: str, markdown_body: str, stats: dict | None = None) -> str:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         return _PAGE.format(title=escape(title), h1=escape(title), ts=ts,
@@ -154,7 +158,7 @@ class Reporter:
     def publish(self, title: str, markdown_body: str, stats: dict | None = None) -> str:
         html = self.render(title, markdown_body, stats)
         date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        key = f"briefs/{date}.html"
+        key = f"{self.prefix}briefs/{date}.html"
         if config.BRIEF_BUCKET:
             loc = self._publish_s3(key, html)
         else:
@@ -167,13 +171,13 @@ class Reporter:
         out = config.LOCAL_ROOT / key
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(html, "utf-8")
-        (config.LOCAL_ROOT / "latest.html").write_text(html, "utf-8")
+        (config.LOCAL_ROOT / f"{self.prefix}latest.html").write_text(html, "utf-8")
         return str(out)
 
     def _publish_s3(self, key: str, html: str) -> str:
         import boto3
         s3 = boto3.client("s3", region_name=config.AWS_REGION)
-        for k in (key, "latest.html"):
+        for k in (key, f"{self.prefix}latest.html"):
             s3.put_object(Bucket=config.BRIEF_BUCKET, Key=k, Body=html.encode("utf-8"),
                           ContentType="text/html; charset=utf-8")
         return f"s3://{config.BRIEF_BUCKET}/{key}"
@@ -193,16 +197,16 @@ class Reporter:
         if config.BRIEF_BUCKET:
             import boto3
             boto3.client("s3", region_name=config.AWS_REGION).put_object(
-                Bucket=config.BRIEF_BUCKET, Key="index.html",
+                Bucket=config.BRIEF_BUCKET, Key=f"{self.prefix}index.html",
                 Body=html.encode("utf-8"), ContentType="text/html; charset=utf-8")
         else:
-            (config.LOCAL_ROOT / "index.html").write_text(html, "utf-8")
+            (config.LOCAL_ROOT / f"{self.prefix}index.html").write_text(html, "utf-8")
 
     def _list_brief_dates(self) -> list[str]:
         if config.BRIEF_BUCKET:
             import boto3
             s3 = boto3.client("s3", region_name=config.AWS_REGION)
-            resp = s3.list_objects_v2(Bucket=config.BRIEF_BUCKET, Prefix="briefs/")
+            resp = s3.list_objects_v2(Bucket=config.BRIEF_BUCKET, Prefix=f"{self.prefix}briefs/")
             keys = [o["Key"] for o in resp.get("Contents", [])]
         else:
             d = config.LOCAL_ROOT / "briefs"

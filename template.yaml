@@ -30,6 +30,12 @@ Parameters:
     Description: >
       Email to get pinged when a brief is ready (via Amazon SNS). Leave blank to
       disable email. You'll receive a one-time SNS confirmation email to accept.
+  SesFrom:
+    Type: String
+    Default: ""
+    Description: >
+      Verified Amazon SES sender address for per-user brief emails on fan-out
+      runs (e.g. "briefs@yourdomain.com"). Leave blank to disable per-user email.
 
 Conditions:
   HasEmail: !Not [!Equals [!Ref NotifyEmail, ""]]
@@ -110,6 +116,7 @@ Resources:
           SIFT_TOPICS: !Ref Topics
           SIFT_RSS_FEEDS: !Ref RssFeeds
           SIFT_SNS_TOPIC_ARN: !Ref NotifyTopic
+          SIFT_SES_FROM: !Ref SesFrom
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref MemoryTable
@@ -124,6 +131,28 @@ Resources:
                 - bedrock:InvokeModel
               Resource:
                 - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-*"
+            - Sid: SesSend
+              Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+
+  FanOutFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handler.fanout_handler
+      Description: Scheduled fan-out - one personal brief per signed-up user.
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+          TARGET_FUNCTION: !Ref SiftFunction
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+        - LambdaInvokePolicy:
+            FunctionName: !Ref SiftFunction
 
   # --- The "always-on" trigger: no button, just a schedule --------------------
   SchedulerInvokeRole:
@@ -143,7 +172,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: lambda:InvokeFunction
-                Resource: !GetAtt SiftFunction.Arn
+                Resource: !GetAtt FanOutFunction.Arn
 
   SiftSchedule:
     Type: AWS::Scheduler::Schedule
@@ -155,9 +184,160 @@ Resources:
       ScheduleExpressionTimezone: !Ref ScheduleTimezone
       State: ENABLED
       Target:
-        Arn: !GetAtt SiftFunction.Arn
+        Arn: !GetAtt FanOutFunction.Arn
         RoleArn: !GetAtt SchedulerInvokeRole.Arn
         Input: '{"trigger": "schedule"}'
+
+  # ===================== Multi-user: signup + preferences =====================
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: sift-users
+      AutoVerifiedAttributes: [email]
+      UsernameAttributes: [email]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireUppercase: true
+          RequireSymbols: false
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      AllowedOAuthFlows: [implicit]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes: [email, openid, profile]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs:
+        - !Sub "https://${WebDistribution.DomainName}/"
+      LogoutURLs:
+        - !Sub "https://${WebDistribution.DomainName}/"
+      ExplicitAuthFlows: [ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "sift-${AWS::AccountId}"
+      UserPoolId: !Ref UserPool
+
+  PrefsApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowHeaders: [content-type, authorization]
+        AllowMethods: [GET, PUT, OPTIONS]
+      Auth:
+        Authorizers:
+          CognitoJwt:
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+              audience:
+                - !Ref UserPoolClient
+        DefaultAuthorizer: CognitoJwt
+
+  PrefsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: api/
+      Handler: prefs.lambda_handler
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        GetPrefs:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PrefsApi
+            Method: GET
+            Path: /prefs
+        PutPrefs:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PrefsApi
+            Method: PUT
+            Path: /prefs
+
+  WebBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  WebOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "sift-web-oac-${AWS::StackName}"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  WebDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: web
+            DomainName: !GetAtt WebBucket.RegionalDomainName
+            OriginAccessControlId: !Ref WebOAC
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: web
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${WebBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution.Id}"
 
 Outputs:
   FunctionName:
@@ -178,3 +358,16 @@ Outputs:
     Value: !Ref NotifyTopic
   ScheduleName:
     Value: !Ref SiftSchedule
+  WebURL:
+    Description: Clean HTTPS app URL - signup, login, preferences.
+    Value: !Sub "https://${WebDistribution.DomainName}"
+  CognitoDomain:
+    Description: Cognito Hosted UI domain.
+    Value: !Sub "sift-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com"
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  PrefsApiBase:
+    Description: Base URL for the preferences API.
+    Value: !Sub "https://${PrefsApi}.execute-api.${AWS::Region}.amazonaws.com"
+  UsersTableName:
+    Value: !Ref UsersTable

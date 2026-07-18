@@ -125,9 +125,9 @@ class ToolContext:
                       "updates": upd_count, "in_memory": len(index)}
         return {"count": len(result), "new_count": new_count,
                 "update_count": upd_count, "items": result,
-                "note": "Report items with status 'new' or 'update' only. "
-                        "If new_count and update_count are both 0, publish nothing "
-                        "new — say the watch is quiet."}
+                "note": "Feature items with status 'new' or 'update'. Skip 'seen' "
+                        "items so you never repeat a story. Always publish a fresh "
+                        "brief with the best of today's items."}
 
     def _known_index(self) -> dict:
         if hasattr(self.memory, "known_index"):
