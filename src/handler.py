@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import config
 import agent
 import tools
+import notify
 from llm import get_llm
 from memory import get_memory
 from report import Reporter
@@ -40,6 +41,19 @@ def run_once(event: dict | None = None) -> dict:
 
     result = agent.run(llm, ctx, tools.TOOL_SPECS, user_prompt)
     log.info("Sift run complete. Published to: %s", result.get("published"))
+
+    if result.get("published"):
+        try:
+            notif = notify.send(
+                subject="Your Sift brief is ready",
+                summary=result.get("final_text") or "A new brief was published.",
+                location=result.get("published"),
+            )
+            result["notified"] = notif
+            log.info("Notification: %s", notif)
+        except Exception as e:  # never fail a run because notification failed
+            log.warning("Notification failed: %s", e)
+            result["notified"] = {"sent": False, "error": str(e)}
     return result
 
 

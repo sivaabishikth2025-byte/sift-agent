@@ -32,6 +32,12 @@ MEMORY_TABLE = _env("SIFT_MEMORY_TABLE")
 # When BRIEF_BUCKET is set we publish briefs to S3; otherwise the local disk.
 BRIEF_BUCKET = _env("SIFT_BRIEF_BUCKET")
 
+# --- Notifications ----------------------------------------------------------
+# Set one of these to get pinged when a brief is ready. If neither is set,
+# notification is a no-op (the brief still publishes).
+SNS_TOPIC_ARN = _env("SIFT_SNS_TOPIC_ARN")   # Amazon SNS (email/SMS)
+WEBHOOK_URL = _env("SIFT_WEBHOOK_URL")        # Slack / Discord / Telegram webhook
+
 # Local storage root (used for memory + briefs when not on AWS).
 # In Lambda the only writable path is /tmp.
 _default_root = "/tmp/sift" if _env("AWS_LAMBDA_FUNCTION_NAME") else str(Path.cwd() / ".sift")
@@ -65,6 +71,7 @@ def summary() -> dict:
         "region": AWS_REGION,
         "memory": "dynamodb" if MEMORY_TABLE else "local-json",
         "briefs": "s3" if BRIEF_BUCKET else "local-disk",
+        "notify": "sns" if SNS_TOPIC_ARN else ("webhook" if WEBHOOK_URL else "none"),
         "topics": TOPICS,
         "rss_feeds": RSS_FEEDS,
     }

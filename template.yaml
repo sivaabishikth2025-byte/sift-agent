@@ -24,6 +24,15 @@ Parameters:
   RssFeeds:
     Type: String
     Default: "https://aws.amazon.com/blogs/aws/feed/,https://hnrss.org/frontpage"
+  NotifyEmail:
+    Type: String
+    Default: ""
+    Description: >
+      Email to get pinged when a brief is ready (via Amazon SNS). Leave blank to
+      disable email. You'll receive a one-time SNS confirmation email to accept.
+
+Conditions:
+  HasEmail: !Not [!Equals [!Ref NotifyEmail, ""]]
 
 Globals:
   Function:
@@ -56,6 +65,19 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
+  NotifyTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Sift
+
+  NotifySubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmail
+    Properties:
+      TopicArn: !Ref NotifyTopic
+      Protocol: email
+      Endpoint: !Ref NotifyEmail
+
   SiftFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -70,11 +92,14 @@ Resources:
           SIFT_BRIEF_BUCKET: !Ref BriefsBucket
           SIFT_TOPICS: !Ref Topics
           SIFT_RSS_FEEDS: !Ref RssFeeds
+          SIFT_SNS_TOPIC_ARN: !Ref NotifyTopic
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref MemoryTable
         - S3CrudPolicy:
             BucketName: !Ref BriefsBucket
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt NotifyTopic.TopicName
         - Statement:
             - Sid: BedrockInvoke
               Effect: Allow
@@ -124,7 +149,10 @@ Outputs:
   MemoryTableName:
     Value: !Ref MemoryTable
   BriefsBucketName:
-    Description: Latest brief lands at s3://<bucket>/latest.html
+    Description: Dashboard at index.html; latest brief at latest.html (private bucket)
     Value: !Ref BriefsBucket
+  NotifyTopicArn:
+    Description: SNS topic used to email you when a brief is ready.
+    Value: !Ref NotifyTopic
   ScheduleName:
     Value: !Ref SiftSchedule
