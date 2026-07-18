@@ -12,62 +12,80 @@ from pathlib import Path
 
 import config
 
+_FAVICON = ("data:image/svg+xml,"
+            "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E"
+            "%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%B0%EF%B8%8F%3C/text%3E%3C/svg%3E")
+
 _PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
+<link rel="icon" href="__FAVICON__">
 <style>
 :root {{
-  --bg:#0b1020; --card:#141b2e; --ink:#e7ecf5; --muted:#95a2bd; --line:#26314b;
-  --accent:#6ea8fe; --accent2:#8b5cf6; --chip:#1e2740;
+  --bg:#0a0e1a; --card:#131a2b; --ink:#eef2fb; --muted:#98a6c4; --line:#242f49;
+  --accent:#7aa2ff; --accent2:#b78bff; --chip:#1c2540;
 }}
 @media (prefers-color-scheme: light) {{
-  :root {{ --bg:#f5f7fb; --card:#ffffff; --ink:#131a2b; --muted:#5b6b8c;
-           --line:#e6ebf5; --accent:#2563eb; --accent2:#7c3aed; --chip:#eef2fb; }}
+  :root {{ --bg:#f4f6fc; --card:#ffffff; --ink:#141b2d; --muted:#5f6f92;
+           --line:#e7ecf7; --accent:#3b5bff; --accent2:#8b5cf6; --chip:#eef2fd; }}
 }}
 * {{ box-sizing:border-box; }}
 body {{ margin:0; background:var(--bg); color:var(--ink);
-  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
-.wrap {{ max-width:760px; margin:0 auto; padding:0 20px 64px; }}
-.hero {{ background:linear-gradient(135deg,var(--accent),var(--accent2));
-  color:#fff; padding:34px 0 30px; margin-bottom:26px; }}
+  font:16px/1.65 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased; }}
+.wrap {{ max-width:780px; margin:0 auto; padding:0 22px 72px; }}
+.hero {{ position:relative; overflow:hidden; color:#fff;
+  background:radial-gradient(1200px 400px at 15% -30%, rgba(255,255,255,.25), transparent),
+             linear-gradient(120deg,#3b5bff,#8b5cf6 55%,#d946ef);
+  padding:40px 0 34px; margin-bottom:28px; box-shadow:0 10px 40px rgba(59,91,255,.25); }}
 .hero .wrap {{ padding-bottom:0; }}
+.brand {{ display:inline-flex; align-items:center; gap:10px; font-weight:800;
+  letter-spacing:.02em; font-size:15px; }}
 .kicker {{ display:inline-flex; align-items:center; gap:8px; font-size:12px;
-  letter-spacing:.08em; text-transform:uppercase; opacity:.92; }}
+  letter-spacing:.1em; text-transform:uppercase; opacity:.95;
+  background:rgba(255,255,255,.16); padding:4px 10px; border-radius:999px; }}
 .dot {{ width:8px; height:8px; border-radius:50%; background:#7CFFB2;
-  box-shadow:0 0 0 4px rgba(124,255,178,.25); }}
-.hero h1 {{ margin:10px 0 4px; font-size:30px; line-height:1.15; }}
-.hero .sub {{ opacity:.9; font-size:14px; }}
+  box-shadow:0 0 0 4px rgba(124,255,178,.28); animation:pulse 2s infinite; }}
+@keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.4}} }}
+.hero h1 {{ margin:14px 0 6px; font-size:32px; line-height:1.12; font-weight:800; }}
+.hero .sub {{ opacity:.92; font-size:14px; }}
+.stats {{ display:flex; gap:10px; flex-wrap:wrap; margin:-14px 0 24px; }}
+.stat {{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:10px 14px; font-size:13px; color:var(--muted); }}
+.stat b {{ display:block; font-size:20px; color:var(--ink); font-weight:800; }}
 .thesis {{ background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent);
-  border-radius:12px; padding:16px 18px; margin:0 0 26px; font-size:17px; }}
-h2 {{ font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
-  margin:30px 0 12px; }}
+  border-radius:14px; padding:18px 20px; margin:0 0 28px; font-size:17px; line-height:1.5; }}
+h2 {{ font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+  margin:32px 0 14px; }}
 ul {{ list-style:none; padding:0; margin:0; display:grid; gap:12px; }}
-li {{ background:var(--card); border:1px solid var(--line); border-radius:12px;
-  padding:14px 16px; transition:transform .08s ease, border-color .08s ease; }}
-li:hover {{ transform:translateY(-1px); border-color:var(--accent); }}
-li a {{ color:var(--ink); text-decoration:none; font-weight:650; }}
+li {{ background:var(--card); border:1px solid var(--line); border-radius:14px;
+  padding:15px 17px; transition:transform .1s ease, border-color .1s ease, box-shadow .1s ease; }}
+li:hover {{ transform:translateY(-2px); border-color:var(--accent);
+  box-shadow:0 8px 24px rgba(0,0,0,.12); }}
+li a {{ color:var(--ink); text-decoration:none; font-weight:700; }}
 li a:hover {{ color:var(--accent); }}
 em {{ font-style:normal; color:var(--accent2); font-weight:600; }}
 p {{ margin:10px 0; color:var(--ink); }}
-.foot {{ margin-top:34px; color:var(--muted); font-size:13px;
-  border-top:1px solid var(--line); padding-top:16px; }}
-.back {{ color:var(--accent); text-decoration:none; font-size:14px; }}
+.foot {{ margin-top:38px; color:var(--muted); font-size:13px;
+  border-top:1px solid var(--line); padding-top:18px; }}
 .index-item {{ display:flex; justify-content:space-between; align-items:center; }}
 .index-item .date {{ color:var(--muted); font-variant-numeric:tabular-nums; }}
 </style></head>
 <body>
 <header class="hero"><div class="wrap">
-  <span class="kicker"><span class="dot"></span> Sift · autonomous run</span>
+  <div class="brand">🛰️ Sift</div>
+  <div style="margin-top:12px"><span class="kicker"><span class="dot"></span> Autonomous run</span></div>
   <h1>{h1}</h1>
-  <div class="sub">Generated {ts} — you didn't have to open a thing.</div>
+  <div class="sub">Generated {ts} · triggered on a schedule — you didn't open a thing.</div>
 </div></header>
 <main class="wrap">
+{stats}
 {body}
-<div class="foot">Produced automatically by the Sift agent on a schedule. No button was clicked.</div>
+<div class="foot">Produced automatically by the Sift agent (Amazon Bedrock Nova + Lambda + EventBridge). No button was clicked.</div>
 </main>
 </body></html>
-"""
+""".replace("__FAVICON__", _FAVICON)
 
 
 def _inline(text: str) -> str:
@@ -114,14 +132,27 @@ def _md_body(md: str) -> str:
     return "\n".join(out)
 
 
+def _stats_html(stats: dict | None) -> str:
+    if not stats:
+        return ""
+    cells = [
+        ("Items scanned", stats.get("scanned")),
+        ("New this run", stats.get("new")),
+        ("In memory", stats.get("in_memory")),
+    ]
+    chips = "".join(f'<div class="stat"><b>{v}</b>{label}</div>'
+                    for label, v in cells if v is not None)
+    return f'<div class="stats">{chips}</div>' if chips else ""
+
+
 class Reporter:
-    def render(self, title: str, markdown_body: str) -> str:
+    def render(self, title: str, markdown_body: str, stats: dict | None = None) -> str:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         return _PAGE.format(title=escape(title), h1=escape(title), ts=ts,
-                            body=_md_body(markdown_body))
+                            stats=_stats_html(stats), body=_md_body(markdown_body))
 
-    def publish(self, title: str, markdown_body: str) -> str:
-        html = self.render(title, markdown_body)
+    def publish(self, title: str, markdown_body: str, stats: dict | None = None) -> str:
+        html = self.render(title, markdown_body, stats)
         date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         key = f"briefs/{date}.html"
         if config.BRIEF_BUCKET:
@@ -157,7 +188,8 @@ class Reporter:
         ) or '<li>No briefs yet.</li>'
         body = f'<h2>All briefs ({len(dates)})</h2>\n<ul>\n{items}\n</ul>'
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        html = _PAGE.format(title="Sift — Dashboard", h1="Sift Dashboard", ts=ts, body=body)
+        html = _PAGE.format(title="Sift — Dashboard", h1="Sift Dashboard", ts=ts,
+                            stats="", body=body)
         if config.BRIEF_BUCKET:
             import boto3
             boto3.client("s3", region_name=config.AWS_REGION).put_object(

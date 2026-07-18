@@ -5,6 +5,15 @@ no app to open) it wakes up, pulls the public sources you care about, **remember
 what it already told you**, reasons about what is *genuinely new*, and leaves a
 dated brief waiting for you.
 
+## Live demo
+
+- **Dashboard:** http://sift-agent-briefsbucket-79m1iuj8cket.s3-website-us-east-1.amazonaws.com
+- **Latest brief:** https://sift-agent-briefsbucket-79m1iuj8cket.s3.us-east-1.amazonaws.com/latest.html
+
+These pages are produced entirely by the agent on a schedule — nobody clicks a button.
+
+---
+
 It's built for the AWS Builder Center *"Build an Always-On Agent"* weekend
 challenge, and it deliberately goes past the usual "cron → summarize headlines"
 bot in three ways:

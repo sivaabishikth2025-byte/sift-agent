@@ -59,11 +59,28 @@ Resources:
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
+      # Public read so the brief is a real, shareable https/http webpage.
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
-        BlockPublicPolicy: true
+        BlockPublicPolicy: false
         IgnorePublicAcls: true
-        RestrictPublicBuckets: true
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+
+  BriefsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BriefsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadBriefs
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${BriefsBucket.Arn}/*"
 
   NotifyTopic:
     Type: AWS::SNS::Topic
@@ -149,8 +166,13 @@ Outputs:
   MemoryTableName:
     Value: !Ref MemoryTable
   BriefsBucketName:
-    Description: Dashboard at index.html; latest brief at latest.html (private bucket)
     Value: !Ref BriefsBucket
+  DashboardURL:
+    Description: Public, live dashboard of every brief - screenshot this.
+    Value: !GetAtt BriefsBucket.WebsiteURL
+  LatestBriefURL:
+    Description: Direct link to the most recent brief.
+    Value: !Sub "http://${BriefsBucket.RegionalDomainName}/latest.html"
   NotifyTopicArn:
     Description: SNS topic used to email you when a brief is ready.
     Value: !Ref NotifyTopic

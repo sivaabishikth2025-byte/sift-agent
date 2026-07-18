@@ -18,25 +18,15 @@ import config
 log = logging.getLogger()
 
 
-def _presigned_link() -> str | None:
-    """A temporary, clickable link to the latest brief in a private S3 bucket."""
+def _public_link() -> str | None:
+    """A stable, public https link to the latest brief on the S3 website bucket."""
     if not config.BRIEF_BUCKET:
         return None
-    try:
-        import boto3
-        s3 = boto3.client("s3", region_name=config.AWS_REGION)
-        return s3.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": config.BRIEF_BUCKET, "Key": "latest.html"},
-            ExpiresIn=7 * 24 * 3600,
-        )
-    except Exception as e:  # pragma: no cover
-        log.warning("presign failed: %s", e)
-        return None
+    return f"https://{config.BRIEF_BUCKET}.s3.{config.AWS_REGION}.amazonaws.com/latest.html"
 
 
 def send(subject: str, summary: str, location: str | None) -> dict:
-    link = _presigned_link() or (location or "")
+    link = _public_link() or (location or "")
     body = f"{summary}\n\nYour brief: {link}\n\n— Sift (this ran on its own)"
 
     if config.SNS_TOPIC_ARN:

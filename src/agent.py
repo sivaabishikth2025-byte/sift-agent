@@ -20,14 +20,25 @@ unattended on a schedule. Your job each run:
    Ignore items already in memory unless there is a meaningful development.
 4. Call save_findings with the ids of the items you are reporting as new, a
    single sharp one-line thesis for today, and your confidence.
-5. Call publish_brief exactly once with a concise, skimmable Markdown brief.
+5. Call publish_brief exactly once. Pass title="Daily Brief - <weekday>, <date>".
 
-The brief must include: a one-line thesis at the top; a "What's new since last \
-time" section (only genuinely new items, each with a link and one line on why \
-it matters); a "How the picture is changing" section that explicitly compares \
-to your previous theses; and a short self-critique of your confidence.
+The markdown_body MUST follow this exact structure (do NOT use any top-level '#'
+heading — the title is a separate field):
 
-Be concise and specific. No filler. Prefer 5 strong items over 15 weak ones."""
+**Thesis:** <one crisp sentence>
+
+## What's new since last time
+- [Title](url) — one line on why it matters
+(only genuinely new items; 3-6 of them; strongest first)
+
+## How the picture is changing
+<1-2 sentences explicitly comparing to your previous theses>
+
+## Confidence
+<one line: your confidence level and an honest caveat>
+
+Be concise and specific. No filler. Prefer 5 strong items over 15 weak ones.
+Keep the whole brief under ~250 words."""
 
 
 def _tool_result_block(tool_use_id: str, payload: dict) -> dict:

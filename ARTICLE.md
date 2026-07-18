@@ -120,6 +120,10 @@ of Nova Lite calls, and tiny DynamoDB/S3 usage. Tear down with
 
 ## Link to App or Repo
 
+**Live agent output (hosted on S3):**
+[the dashboard](http://sift-agent-briefsbucket-79m1iuj8cket.s3-website-us-east-1.amazonaws.com)
+· [latest brief](https://sift-agent-briefsbucket-79m1iuj8cket.s3.us-east-1.amazonaws.com/latest.html)
+
 Source code (public GitHub repo): **[https://github.com/sivaabishikth2025-byte/sift-agent](https://github.com/sivaabishikth2025-byte/sift-agent)**
 
 Anyone can deploy their own personalized instance — the README has a

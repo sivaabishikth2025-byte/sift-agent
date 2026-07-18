@@ -95,6 +95,7 @@ class ToolContext:
         self.reporter = reporter
         self.fetched: dict[str, dict] = {}
         self.published_location: str | None = None
+        self.stats: dict = {}
 
     # -- tool implementations ------------------------------------------------
     def fetch_signals(self, limit: int = 30) -> dict:
@@ -110,6 +111,7 @@ class ToolContext:
                 "is_new": it["id"] not in known,
             })
         new_count = sum(1 for r in result if r["is_new"])
+        self.stats = {"scanned": len(result), "new": new_count, "in_memory": len(known)}
         return {"count": len(result), "new_count": new_count, "items": result}
 
     def recall_memory(self, query: str) -> dict:
@@ -136,7 +138,7 @@ class ToolContext:
         return {"stored_items": len(to_store), "thesis_saved": True}
 
     def publish_brief(self, title: str, markdown_body: str) -> dict:
-        location = self.reporter.publish(title, markdown_body)
+        location = self.reporter.publish(title, markdown_body, stats=self.stats)
         self.published_location = location
         return {"published": True, "location": location}
 
