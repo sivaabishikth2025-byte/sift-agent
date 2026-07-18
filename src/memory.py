@@ -33,6 +33,9 @@ class LocalMemory:
     def known_ids(self) -> set[str]:
         return set(self._data["items"].keys())
 
+    def known_index(self) -> dict[str, str]:
+        return {i: it.get("hash", "") for i, it in self._data["items"].items()}
+
     def search(self, query: str, limit: int = 10) -> list[dict]:
         q = (query or "").lower()
         scored = []
@@ -53,7 +56,7 @@ class LocalMemory:
             self._data["items"][it["id"]] = {
                 "id": it["id"], "title": it.get("title", ""),
                 "url": it.get("url", ""), "note": it.get("note", ""),
-                "first_seen": now,
+                "hash": it.get("hash", ""), "first_seen": now,
             }
         self._flush()
 
@@ -61,6 +64,18 @@ class LocalMemory:
         self._data["theses"].append(
             {"ts": int(time.time()), "thesis": thesis, "confidence": confidence}
         )
+        self._flush()
+
+    def mark_seen(self, items: list[dict]):
+        now = int(time.time())
+        for it in items:
+            if it["id"] in self._data["items"]:
+                continue
+            self._data["items"][it["id"]] = {
+                "id": it["id"], "title": it.get("title", ""), "url": it.get("url", ""),
+                "note": it.get("note") or it.get("summary", ""),
+                "hash": it.get("hash", ""), "first_seen": now,
+            }
         self._flush()
 
 
@@ -80,6 +95,19 @@ class DynamoDBMemory:
                 break
             kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
         return {i.split("item#", 1)[1] for i in ids}
+
+    def known_index(self) -> dict[str, str]:
+        idx: dict[str, str] = {}
+        kwargs = {"FilterExpression": "begins_with(pk, :p)",
+                  "ExpressionAttributeValues": {":p": "item#"}}
+        while True:
+            resp = self._t.scan(**kwargs)
+            for i in resp.get("Items", []):
+                idx[i["pk"].split("item#", 1)[1]] = i.get("hash", "")
+            if "LastEvaluatedKey" not in resp:
+                break
+            kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+        return idx
 
     def search(self, query: str, limit: int = 10) -> list[dict]:
         q = (query or "").lower()
@@ -112,7 +140,7 @@ class DynamoDBMemory:
                 bw.put_item(Item={
                     "pk": f"item#{it['id']}", "title": it.get("title", ""),
                     "url": it.get("url", ""), "note": it.get("note", ""),
-                    "first_seen": now,
+                    "hash": it.get("hash", ""), "first_seen": now,
                 })
 
     def remember_thesis(self, thesis: str, confidence: str):
@@ -121,8 +149,27 @@ class DynamoDBMemory:
             "pk": f"thesis#{ts}", "ts": ts, "thesis": thesis, "confidence": confidence,
         })
 
+    def mark_seen(self, items: list[dict]):
+        known = self.known_ids()
+        now = int(time.time())
+        with self._t.batch_writer() as bw:
+            for it in items:
+                if it["id"] in known:
+                    continue
+                bw.put_item(Item={
+                    "pk": f"item#{it['id']}", "title": it.get("title", ""),
+                    "url": it.get("url", ""),
+                    "note": it.get("note") or it.get("summary", ""),
+                    "hash": it.get("hash", ""), "first_seen": now,
+                })
+
 
 def get_memory():
+    if config.OBSIDIAN_REPO:
+        import obsidian
+        vault = obsidian.get_vault()
+        if vault:
+            return obsidian.ObsidianMemory(vault)
     if config.MEMORY_TABLE:
         return DynamoDBMemory(config.MEMORY_TABLE)
     return LocalMemory(config.LOCAL_ROOT)

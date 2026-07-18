@@ -7,6 +7,7 @@ the local StubLLM.
 from __future__ import annotations
 
 import json
+import re
 
 import config
 
@@ -14,12 +15,18 @@ import config
 SYSTEM_PROMPT = """You are Sift, an always-on personal signal analyst that runs \
 unattended on a schedule. Your job each run:
 
-1. Call fetch_signals to pull the latest items from the user's sources.
+1. Call fetch_signals to pull the latest items from the user's sources. Each
+   item has a status: "new" (never seen), "update" (a story you already track
+   that materially changed), or "seen" (nothing new — IGNORE these).
 2. Call recall_memory to see what you already reported and your recent theses.
-3. Decide what is GENUINELY NEW and relevant to the user's topics: {topics}.
-   Ignore items already in memory unless there is a meaningful development.
-4. Call save_findings with the ids of the items you are reporting as new, a
-   single sharp one-line thesis for today, and your confidence.
+3. Report ONLY items whose status is "new" or "update", and only those relevant
+   to the user's topics: {topics}. Never repeat a "seen" item.
+   IMPORTANT: if there are zero new and zero update items, do NOT invent content.
+   Call save_findings with an empty new_item_ids list and a thesis like "Quiet
+   watch — nothing materially new.", then publish a short brief saying the watch
+   was quiet today. Silence is a valid, valuable result.
+4. Call save_findings with the ids of the items you are reporting (new + update),
+   a single sharp one-line thesis, and your confidence.
 5. Call publish_brief exactly once. Pass title="Daily Brief - <weekday>, <date>".
 
 The markdown_body MUST follow this exact structure (do NOT use any top-level '#'
@@ -61,9 +68,11 @@ def run(llm, ctx, tools_spec, user_prompt: str) -> dict:
         tool_uses = [b["toolUse"] for b in assistant_msg.get("content", []) if "toolUse" in b]
         if not tool_uses:
             final_text = " ".join(b.get("text", "") for b in assistant_msg.get("content", []))
+            final_text = _strip_thinking(final_text)
             trace.append({"turn": turn, "action": "final", "text": final_text})
             return {"final_text": final_text.strip(), "trace": trace,
-                    "published": ctx.published_location}
+                    "published": ctx.published_location,
+                    "thesis": ctx.thesis, "title": ctx.brief_title, "stats": ctx.stats}
 
         tool_result_blocks = []
         for tu in tool_uses:
@@ -77,7 +86,12 @@ def run(llm, ctx, tools_spec, user_prompt: str) -> dict:
 
     trace.append({"turn": config.MAX_TURNS, "action": "max_turns_reached"})
     return {"final_text": "Stopped at max turns.", "trace": trace,
-            "published": ctx.published_location}
+            "published": ctx.published_location,
+            "thesis": ctx.thesis, "title": ctx.brief_title, "stats": ctx.stats}
+
+
+def _strip_thinking(text: str) -> str:
+    return re.sub(r"<thinking>.*?</thinking>", "", text, flags=re.S | re.I).strip()
 
 
 def _preview(result: dict) -> str:

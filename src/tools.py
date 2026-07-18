@@ -96,23 +96,43 @@ class ToolContext:
         self.fetched: dict[str, dict] = {}
         self.published_location: str | None = None
         self.stats: dict = {}
+        self.thesis: str | None = None
+        self.brief_title: str | None = None
 
     # -- tool implementations ------------------------------------------------
     def fetch_signals(self, limit: int = 30) -> dict:
+        import obsidian
         limit = max(1, min(int(limit or 30), 40))
-        known = self.memory.known_ids()
+        index = self._known_index()
         items = sources.gather_all()
         result = []
         for it in items[:limit]:
             self.fetched[it["id"]] = it
+            h = obsidian.content_hash(it["title"], it["summary"])
+            it["hash"] = h
+            prev = index.get(it["id"])
+            is_new = it["id"] not in index
+            is_update = (prev is not None and prev != "" and prev != h)
             result.append({
                 "id": it["id"], "title": it["title"], "url": it["url"],
                 "source": it["source"], "summary": it["summary"],
-                "is_new": it["id"] not in known,
+                "hash": h, "is_new": is_new, "is_update": is_update,
+                "status": "new" if is_new else ("update" if is_update else "seen"),
             })
         new_count = sum(1 for r in result if r["is_new"])
-        self.stats = {"scanned": len(result), "new": new_count, "in_memory": len(known)}
-        return {"count": len(result), "new_count": new_count, "items": result}
+        upd_count = sum(1 for r in result if r["is_update"])
+        self.stats = {"scanned": len(result), "new": new_count,
+                      "updates": upd_count, "in_memory": len(index)}
+        return {"count": len(result), "new_count": new_count,
+                "update_count": upd_count, "items": result,
+                "note": "Report items with status 'new' or 'update' only. "
+                        "If new_count and update_count are both 0, publish nothing "
+                        "new — say the watch is quiet."}
+
+    def _known_index(self) -> dict:
+        if hasattr(self.memory, "known_index"):
+            return self.memory.known_index()
+        return {i: "" for i in self.memory.known_ids()}
 
     def recall_memory(self, query: str) -> dict:
         hits = self.memory.search(query, limit=10)
@@ -131,15 +151,24 @@ class ToolContext:
             it = self.fetched.get(iid)
             if it:
                 to_store.append({"id": it["id"], "title": it["title"],
-                                 "url": it["url"], "note": it["summary"]})
+                                 "url": it["url"], "note": it["summary"],
+                                 "hash": it.get("hash", "")})
         if to_store:
             self.memory.remember_items(to_store)
         self.memory.remember_thesis(thesis, confidence)
+        self.thesis = thesis
         return {"stored_items": len(to_store), "thesis_saved": True}
 
     def publish_brief(self, title: str, markdown_body: str) -> dict:
         location = self.reporter.publish(title, markdown_body, stats=self.stats)
+        # Also write the brief into the Obsidian vault, if connected.
+        if hasattr(self.memory, "write_brief_note"):
+            try:
+                self.memory.write_brief_note(title, markdown_body)
+            except Exception:
+                pass
         self.published_location = location
+        self.brief_title = title
         return {"published": True, "location": location}
 
     # -- dispatch ------------------------------------------------------------

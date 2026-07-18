@@ -40,13 +40,24 @@ def run_once(event: dict | None = None) -> dict:
     )
 
     result = agent.run(llm, ctx, tools.TOOL_SPECS, user_prompt)
+
+    # Record everything seen this run (not just featured items) so no story is
+    # ever resurfaced. This is what makes the watch go quiet when nothing's new.
+    if ctx.fetched and hasattr(memory, "mark_seen"):
+        try:
+            memory.mark_seen(list(ctx.fetched.values()))
+        except Exception as e:
+            log.warning("mark_seen failed: %s", e)
+
     log.info("Sift run complete. Published to: %s", result.get("published"))
 
     if result.get("published"):
         try:
+            title = result.get("title") or "Your Sift brief is ready"
+            summary = result.get("thesis") or "A new brief is ready."
             notif = notify.send(
-                subject="Your Sift brief is ready",
-                summary=result.get("final_text") or "A new brief was published.",
+                subject=title,
+                summary=summary,
                 location=result.get("published"),
             )
             result["notified"] = notif

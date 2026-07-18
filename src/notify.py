@@ -27,7 +27,7 @@ def _public_link() -> str | None:
 
 def send(subject: str, summary: str, location: str | None) -> dict:
     link = _public_link() or (location or "")
-    body = f"{summary}\n\nYour brief: {link}\n\n— Sift (this ran on its own)"
+    body = f"{summary}\n\nRead the full brief: {link}\n\n— Sift"
 
     if config.SNS_TOPIC_ARN:
         import boto3

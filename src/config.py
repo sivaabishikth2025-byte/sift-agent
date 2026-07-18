@@ -32,6 +32,14 @@ MEMORY_TABLE = _env("SIFT_MEMORY_TABLE")
 # When BRIEF_BUCKET is set we publish briefs to S3; otherwise the local disk.
 BRIEF_BUCKET = _env("SIFT_BRIEF_BUCKET")
 
+# --- Obsidian (Git-synced vault) --------------------------------------------
+# Connect a GitHub repo that your Obsidian vault syncs to (Obsidian Git plugin).
+# When set, Sift uses the vault as its memory and writes notes into it.
+OBSIDIAN_REPO = _env("SIFT_OBSIDIAN_REPO")     # e.g. "user/my-vault"
+OBSIDIAN_BRANCH = _env("SIFT_OBSIDIAN_BRANCH", "main")
+OBSIDIAN_BASE = _env("SIFT_OBSIDIAN_BASE", "Sift")  # folder inside the vault
+GITHUB_TOKEN = _env("SIFT_GITHUB_TOKEN") or _env("GITHUB_TOKEN")
+
 # --- Notifications ----------------------------------------------------------
 # Set one of these to get pinged when a brief is ready. If neither is set,
 # notification is a no-op (the brief still publishes).
@@ -69,8 +77,9 @@ def summary() -> dict:
         "llm_mode": LLM_MODE,
         "model_id": MODEL_ID,
         "region": AWS_REGION,
-        "memory": "dynamodb" if MEMORY_TABLE else "local-json",
+        "memory": "obsidian" if OBSIDIAN_REPO else ("dynamodb" if MEMORY_TABLE else "local-json"),
         "briefs": "s3" if BRIEF_BUCKET else "local-disk",
+        "obsidian": OBSIDIAN_REPO or "off",
         "notify": "sns" if SNS_TOPIC_ARN else ("webhook" if WEBHOOK_URL else "none"),
         "topics": TOPICS,
         "rss_feeds": RSS_FEEDS,

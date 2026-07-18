@@ -75,14 +75,14 @@ p {{ margin:10px 0; color:var(--ink); }}
 <body>
 <header class="hero"><div class="wrap">
   <div class="brand">🛰️ Sift</div>
-  <div style="margin-top:12px"><span class="kicker"><span class="dot"></span> Autonomous run</span></div>
+  <div style="margin-top:12px"><span class="kicker"><span class="dot"></span> Auto-updated daily</span></div>
   <h1>{h1}</h1>
-  <div class="sub">Generated {ts} · triggered on a schedule — you didn't open a thing.</div>
+  <div class="sub">Updated {ts}</div>
 </div></header>
 <main class="wrap">
 {stats}
 {body}
-<div class="foot">Produced automatically by the Sift agent (Amazon Bedrock Nova + Lambda + EventBridge). No button was clicked.</div>
+<div class="foot">Sift · powered by Amazon Bedrock Nova</div>
 </main>
 </body></html>
 """.replace("__FAVICON__", _FAVICON)
