@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Sift - an always-on personal signal analyst. Amazon EventBridge Scheduler wakes a
+  Lambda on a schedule; the Lambda runs an agentic Bedrock Nova (Converse + tool use)
+  loop that pulls public sources, diffs them against DynamoDB memory, and publishes a
+  dated HTML brief to S3. No button clicks. Free-tier friendly.
+
+Parameters:
+  ScheduleExpression:
+    Type: String
+    Default: "cron(0 6 * * ? *)"
+    Description: When the agent wakes (default 06:00 daily). Uses EventBridge cron.
+  ScheduleTimezone:
+    Type: String
+    Default: "America/New_York"
+  ModelId:
+    Type: String
+    Default: "amazon.nova-lite-v1:0"
+    Description: Amazon Bedrock model id (Nova supports tool use via Converse).
+  Topics:
+    Type: String
+    Default: "AI agents, AWS, serverless, developer tooling, LLMs"
+  RssFeeds:
+    Type: String
+    Default: "https://aws.amazon.com/blogs/aws/feed/,https://hnrss.org/frontpage"
+
+Globals:
+  Function:
+    Timeout: 120
+    MemorySize: 512
+    Runtime: python3.12
+
+Resources:
+
+  MemoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+
+  BriefsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  SiftFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handler.lambda_handler
+      Description: Runs one autonomous Sift analyst cycle.
+      Environment:
+        Variables:
+          SIFT_LLM: bedrock
+          SIFT_MODEL_ID: !Ref ModelId
+          SIFT_MEMORY_TABLE: !Ref MemoryTable
+          SIFT_BRIEF_BUCKET: !Ref BriefsBucket
+          SIFT_TOPICS: !Ref Topics
+          SIFT_RSS_FEEDS: !Ref RssFeeds
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MemoryTable
+        - S3CrudPolicy:
+            BucketName: !Ref BriefsBucket
+        - Statement:
+            - Sid: BedrockInvoke
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-*"
+
+  # --- The "always-on" trigger: no button, just a schedule --------------------
+  SchedulerInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeSift
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt SiftFunction.Arn
+
+  SiftSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Description: Wakes the Sift agent on a schedule.
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      ScheduleExpression: !Ref ScheduleExpression
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      State: ENABLED
+      Target:
+        Arn: !GetAtt SiftFunction.Arn
+        RoleArn: !GetAtt SchedulerInvokeRole.Arn
+        Input: '{"trigger": "schedule"}'
+
+Outputs:
+  FunctionName:
+    Description: Invoke this manually to force a run - "run it now" for the demo.
+    Value: !Ref SiftFunction
+  MemoryTableName:
+    Value: !Ref MemoryTable
+  BriefsBucketName:
+    Description: Latest brief lands at s3://<bucket>/latest.html
+    Value: !Ref BriefsBucket
+  ScheduleName:
+    Value: !Ref SiftSchedule
